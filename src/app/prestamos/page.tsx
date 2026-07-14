@@ -519,7 +519,15 @@ export default function PrestamosPage() {
                           className="hover:bg-slate-50"
                         >
                           <td className="whitespace-nowrap px-5 py-4 text-sm font-medium text-blue-900">
-                            {prestamo.loan_number}
+                          <button
+  type="button"
+  onClick={function abrirDetallePrestamo() {
+    window.location.href = "/prestamos/" + prestamo.id;
+  }}
+  className="font-medium text-blue-900 hover:underline"
+>
+  {prestamo.loan_number}
+</button>
                           </td>
 
                           <td className="whitespace-nowrap px-5 py-4 text-sm text-gray-900">

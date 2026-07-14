@@ -7,6 +7,7 @@ import {
   useMemo,
   useState,
 } from "react";
+import { useSearchParams } from "next/navigation";
 import { createClient } from "../lib/supabase";
 
 type Cliente = {
@@ -84,6 +85,9 @@ const formularioInicial: FormularioPago = {
 };
 
 export default function CobrosPage() {
+  const searchParams = useSearchParams();
+  const loanIdDesdeUrl = searchParams.get("loanId");
+    
   const supabase = useMemo(function crearSupabase() {
     return createClient();
   }, []);
@@ -181,6 +185,36 @@ export default function CobrosPage() {
     [cargarDatos],
   );
 
+  useEffect(
+    function seleccionarPrestamoDesdeUrl() {
+      if (!loanIdDesdeUrl || cargando) {
+        return;
+      }
+  
+      const prestamoEncontrado =
+        prestamos.find(function encontrarPrestamo(prestamo) {
+          return prestamo.id === loanIdDesdeUrl;
+        }) || null;
+  
+      if (!prestamoEncontrado) {
+        setMensajeError(
+          "No se encontró el préstamo indicado en la dirección.",
+        );
+        return;
+      }
+  
+      const clienteEncontrado =
+        clientes.find(function encontrarCliente(cliente) {
+          return cliente.id === prestamoEncontrado.client_id;
+        }) || null;
+  
+      setPrestamoSeleccionado(prestamoEncontrado);
+      setClienteSeleccionado(clienteEncontrado);
+      setModalPagoAbierto(true);
+    },
+    [loanIdDesdeUrl, cargando, prestamos, clientes],
+  );
+  
   const clientesFiltrados = useMemo(
     function filtrarClientes() {
       const termino = busquedaCliente.trim().toLowerCase();
