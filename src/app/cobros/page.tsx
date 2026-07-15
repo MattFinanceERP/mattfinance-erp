@@ -9,6 +9,7 @@ import {
 } from "react";
 import { useSearchParams } from "next/navigation";
 import { createClient } from "../lib/supabase";
+import ReciboPago from "../components/ReciboPago";
 
 type Cliente = {
   id: string;
@@ -95,6 +96,7 @@ export default function CobrosPage() {
   const [clientes, setClientes] = useState<Cliente[]>([]);
   const [prestamos, setPrestamos] = useState<Prestamo[]>([]);
   const [pagos, setPagos] = useState<Pago[]>([]);
+  const [ultimoPago, setUltimoPago] = useState<Pago | null>(null);
 
   const [busquedaCliente, setBusquedaCliente] = useState("");
   const [clienteSeleccionado, setClienteSeleccionado] =
@@ -214,7 +216,7 @@ export default function CobrosPage() {
     },
     [loanIdDesdeUrl, cargando, prestamos, clientes],
   );
-  
+
   const clientesFiltrados = useMemo(
     function filtrarClientes() {
       const termino = busquedaCliente.trim().toLowerCase();
@@ -444,8 +446,31 @@ export default function CobrosPage() {
       typeof datosResultado.payment_number === "string"
         ? datosResultado.payment_number
         : "";
-
+    
     setUltimoRecibo(numeroRecibo);
+    
+    setUltimoPago({
+      id:
+        datosResultado &&
+        typeof datosResultado.payment_id === "string"
+          ? datosResultado.payment_id
+          : "",
+      payment_number: numeroRecibo,
+      payment_date: new Date().toISOString(),
+      amount: monto,
+      principal_amount: capital,
+      interest_amount: interes,
+      late_fee_amount: mora,
+      payment_method: formulario.payment_method,
+      affects_cash: formulario.affects_cash,
+      status: "posted",
+      loans: {
+        loan_number: prestamoSeleccionado.loan_number,
+        clients: prestamoSeleccionado.clients || null,
+        currencies: prestamoSeleccionado.currencies || null,
+      },
+    } as Pago);
+    
     setMensajeExito("Pago registrado correctamente.");
     setFormulario(formularioInicial);
 
@@ -477,7 +502,101 @@ export default function CobrosPage() {
       return "Retiro con tarjeta";
     }
 
+    
+
     return "Otro";
+  }
+
+  function imprimirRecibo() {
+    const recibo = document.querySelector(".print-area");
+  
+    if (!recibo) {
+      window.alert("No se encontró el recibo para imprimir.");
+      return;
+    }
+  
+    const ventanaImpresion = window.open(
+      "",
+      "_blank",
+      "width=700,height=800",
+    );
+  
+    if (!ventanaImpresion) {
+      window.alert(
+        "El navegador bloqueó la ventana de impresión. Permite las ventanas emergentes e inténtalo nuevamente.",
+      );
+      return;
+    }
+  
+    ventanaImpresion.document.write(`
+      <!DOCTYPE html>
+      <html lang="es">
+        <head>
+          <meta charset="UTF-8" />
+          <title>Recibo de pago</title>
+  
+          <style>
+            * {
+              box-sizing: border-box;
+            }
+  
+            html,
+            body {
+              width: 80%;
+              margin: 0;
+              padding: 0;
+              background: white;
+              font-family: Arial, Helvetica, sans-serif;
+              color: #171717;
+            }
+  
+            .recibo {
+                width: 80mm;
+                margin: 0;
+                padding: 4mm;
+                background: white;
+                font-size: 12px;
+            }
+  
+            h1 {
+              margin: 0;
+              text-align: center;
+              font-size: 18px;
+            }
+  
+            p {
+              margin: 4px 0;
+              font-size: 12px;
+            }
+  
+            hr {
+              margin: 8px 0;
+              border: 0;
+              border-top: 1px dashed #000;
+            }
+  
+            @page {
+              size: 80mm auto;
+              margin: 0;
+            }
+          </style>
+        </head>
+  
+        <body>
+          <div class="recibo">
+            ${recibo.innerHTML}
+          </div>
+        </body>
+      </html>
+    `);
+  
+    ventanaImpresion.document.close();
+    ventanaImpresion.focus();
+  
+    ventanaImpresion.onload = function () {
+      ventanaImpresion.print();
+      ventanaImpresion.close();
+    };
   }
 
   function formatearMonto(
@@ -523,17 +642,56 @@ export default function CobrosPage() {
           </div>
         )}
 
-        {mensajeExito !== "" && (
-          <div className="mt-6 rounded-lg border border-green-200 bg-green-50 p-4 text-sm text-green-800">
-            <p className="font-semibold">{mensajeExito}</p>
+{mensajeExito !== "" && (
+  <div className="mt-6 rounded-lg border border-green-200 bg-green-50 p-4 text-sm text-green-800">
+    <p className="font-semibold">{mensajeExito}</p>
 
-            {ultimoRecibo !== "" && (
-              <p className="mt-1">
-                Número de recibo: {ultimoRecibo}
-              </p>
-            )}
+    {ultimoRecibo !== "" && (
+      <>
+        <p className="mt-1">
+          Número de recibo: {ultimoRecibo}
+        </p>
+
+        <button
+          type="button"
+          onClick={imprimirRecibo}
+          className="mt-3 rounded-lg bg-blue-700 px-4 py-2 text-white hover:bg-blue-800"
+        >
+          Imprimir recibo
+        </button>
+
+        {ultimoPago !== null && (
+          <div className="mt-4">
+            <ReciboPago
+              numeroRecibo={ultimoPago.payment_number}
+              cliente={
+                ultimoPago.loans?.clients
+                  ? ultimoPago.loans.clients.first_name +
+                    " " +
+                    ultimoPago.loans.clients.last_name
+                  : "Cliente no disponible"
+              }
+              prestamo={
+                ultimoPago.loans?.loan_number ??
+                "Préstamo no disponible"
+              }
+              fecha={new Date(
+                ultimoPago.payment_date,
+              ).toLocaleString("es-DO")}
+              monto={Number(ultimoPago.amount)}
+              capital={Number(ultimoPago.principal_amount)}
+              interes={Number(ultimoPago.interest_amount)}
+              mora={Number(ultimoPago.late_fee_amount)}
+              metodo={obtenerTextoMetodo(
+                ultimoPago.payment_method,
+              )}
+            />
           </div>
         )}
+      </>
+    )}
+  </div>
+)}
 
         <section className="mt-8 rounded-2xl bg-white p-6 shadow">
           <h2 className="text-xl font-bold text-blue-900">
@@ -1039,7 +1197,7 @@ export default function CobrosPage() {
                 </label>
 
                 <input
-                  id="principal_amount"
+                   id="principal_amount"
                   type="number"
                   min="0"
                   step="0.01"
@@ -1071,6 +1229,7 @@ export default function CobrosPage() {
                       payment_method: event.target.value,
                     });
                   }}
+
                   className="mt-1 w-full rounded-lg border border-gray-300 bg-white p-3 outline-none focus:border-blue-700"
                 >
                   <option value="cash">Efectivo</option>
