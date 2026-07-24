@@ -122,6 +122,69 @@ type GarantiaPrestamo = {
   executed_at: string | null;
   notes: string | null;
 };
+type RetiroTarjetaPrestamo = {
+  id: string;
+  collection_date: string;
+  withdrawn_amount: number;
+  payment_applied: number;
+  client_surplus: number;
+  bank_fee: number;
+  reference_number: string | null;
+  closure_id: string | null;
+  closure_status: string;
+  status: string;
+};
+
+type CierreTarjetaPrestamo = {
+  id: string;
+  closure_number: string;
+  period_start: string;
+  period_end: string;
+  closed_at: string;
+  status: string;
+};
+
+type SobrantePrestamo = {
+  id: string;
+  original_amount: number;
+  delivered_amount: number;
+  pending_amount: number;
+  status: string;
+  delivered_at: string | null;
+  delivered_to: string | null;
+  delivery_reference: string | null;
+  created_at: string;
+};
+
+type VentaGarantiaPrestamo = {
+  id: string;
+  sale_number: string;
+  sale_date: string;
+  buyer_name: string;
+  gross_sale_amount: number;
+  total_expenses: number;
+  net_sale_amount: number;
+  amount_applied_to_loan: number;
+  remaining_amount: number;
+  status: string;
+};
+
+type EventoExpedientePrestamo = {
+  id: string;
+  fecha: string;
+  titulo: string;
+  descripcion: string;
+  categoria:
+    | "prestamo"
+    | "pago"
+    | "tarjeta"
+    | "cierre"
+    | "sobrante"
+    | "venta"
+    | "garantia";
+  monto?: number;
+};
+
  
 export default function PrestamoDetallePage() {
   const params = useParams();
@@ -141,6 +204,14 @@ export default function PrestamoDetallePage() {
     useState<DetalleTarjeta | null>(null);
   const [garantias, setGarantias] =
     useState<GarantiaPrestamo[]>([]);
+  const [retirosTarjeta, setRetirosTarjeta] =
+    useState<RetiroTarjetaPrestamo[]>([]);
+  const [cierresTarjeta, setCierresTarjeta] =
+    useState<CierreTarjetaPrestamo[]>([]);
+  const [sobrantes, setSobrantes] =
+    useState<SobrantePrestamo[]>([]);
+  const [ventasGarantia, setVentasGarantia] =
+    useState<VentaGarantiaPrestamo[]>([]);
   const [cargando, setCargando] = useState(true);
   const [mensajeError, setMensajeError] = useState("");
  
@@ -197,6 +268,49 @@ export default function PrestamoDetallePage() {
           )
           .eq("loan_id", prestamoId)
           .order("created_at", { ascending: true });
+
+        const resultadoRetirosTarjeta = await supabase
+          .from("card_collection_transactions")
+          .select(
+            "id, collection_date, withdrawn_amount, payment_applied, client_surplus, bank_fee, reference_number, closure_id, closure_status, status",
+          )
+          .eq("loan_id", prestamoId)
+          .order("collection_date", { ascending: true });
+
+        const resultadoSobrantes = await supabase
+          .from("client_surplus_balances")
+          .select(
+            "id, original_amount, delivered_amount, pending_amount, status, delivered_at, delivered_to, delivery_reference, created_at",
+          )
+          .eq("loan_id", prestamoId)
+          .order("created_at", { ascending: true });
+
+        const resultadoVentasGarantia = await supabase
+          .from("collateral_sales")
+          .select(
+            "id, sale_number, sale_date, buyer_name, gross_sale_amount, total_expenses, net_sale_amount, amount_applied_to_loan, remaining_amount, status",
+          )
+          .eq("loan_id", prestamoId)
+          .order("sale_date", { ascending: true });
+
+        const idsCierres = Array.from(
+          new Set(
+            ((resultadoRetirosTarjeta.data || []) as RetiroTarjetaPrestamo[])
+              .map((retiro) => retiro.closure_id)
+              .filter((id): id is string => Boolean(id)),
+          ),
+        );
+
+        const resultadoCierresTarjeta =
+          idsCierres.length === 0
+            ? { data: [], error: null }
+            : await supabase
+                .from("card_closures")
+                .select(
+                  "id, closure_number, period_start, period_end, closed_at, status",
+                )
+                .in("id", idsCierres)
+                .order("closed_at", { ascending: true });
  
         if (resultado.error) {
           setMensajeError(
@@ -255,6 +369,54 @@ export default function PrestamoDetallePage() {
         } else {
           setGarantias(
             (resultadoGarantias.data || []) as GarantiaPrestamo[],
+          );
+        }
+
+        if (resultadoRetirosTarjeta.error) {
+          setMensajeError(
+            "No se pudieron cargar los retiros de tarjeta: " +
+              resultadoRetirosTarjeta.error.message,
+          );
+          setRetirosTarjeta([]);
+        } else {
+          setRetirosTarjeta(
+            (resultadoRetirosTarjeta.data || []) as RetiroTarjetaPrestamo[],
+          );
+        }
+
+        if (resultadoCierresTarjeta.error) {
+          setMensajeError(
+            "No se pudieron cargar los cierres de tarjeta: " +
+              resultadoCierresTarjeta.error.message,
+          );
+          setCierresTarjeta([]);
+        } else {
+          setCierresTarjeta(
+            (resultadoCierresTarjeta.data || []) as CierreTarjetaPrestamo[],
+          );
+        }
+
+        if (resultadoSobrantes.error) {
+          setMensajeError(
+            "No se pudieron cargar los sobrantes: " +
+              resultadoSobrantes.error.message,
+          );
+          setSobrantes([]);
+        } else {
+          setSobrantes(
+            (resultadoSobrantes.data || []) as SobrantePrestamo[],
+          );
+        }
+
+        if (resultadoVentasGarantia.error) {
+          setMensajeError(
+            "No se pudieron cargar las ventas de garantías: " +
+              resultadoVentasGarantia.error.message,
+          );
+          setVentasGarantia([]);
+        } else {
+          setVentasGarantia(
+            (resultadoVentasGarantia.data || []) as VentaGarantiaPrestamo[],
           );
         }
  
@@ -374,6 +536,214 @@ export default function PrestamoDetallePage() {
     [prestamo],
   );
  
+
+  const expedientePrestamo = useMemo(
+    function construirExpedientePrestamo() {
+      if (!prestamo) return [];
+
+      const eventos: EventoExpedientePrestamo[] = [
+        {
+          id: `prestamo-${prestamo.id}`,
+          fecha: `${prestamo.start_date}T12:00:00`,
+          titulo: "Préstamo creado",
+          descripcion:
+            `Se registró el préstamo ${prestamo.loan_number} por ` +
+            `${prestamo.currencies?.symbol || ""} ` +
+            `${Number(prestamo.principal_amount).toLocaleString("es-DO", {
+              minimumFractionDigits: 2,
+              maximumFractionDigits: 2,
+            })}.`,
+          categoria: "prestamo",
+          monto: Number(prestamo.principal_amount),
+        },
+      ];
+
+      pagos
+        .filter((pago) => pago.status !== "cancelled")
+        .forEach((pago) => {
+          eventos.push({
+            id: `pago-${pago.id}`,
+            fecha: pago.payment_date,
+            titulo: `Pago registrado · ${pago.payment_number}`,
+            descripcion:
+              `Capital: ${formatearMonto(Number(pago.principal_amount))}. ` +
+              `Interés: ${formatearMonto(Number(pago.interest_amount))}. ` +
+              `Mora: ${formatearMonto(Number(pago.late_fee_amount))}. ` +
+              `Método: ${obtenerMetodoPago(pago.payment_method)}.`,
+            categoria: "pago",
+            monto: Number(pago.amount),
+          });
+        });
+
+      if (detalleTarjeta?.custody_received_at) {
+        eventos.push({
+          id: `tarjeta-recibida-${detalleTarjeta.id}`,
+          fecha: detalleTarjeta.custody_received_at,
+          titulo: "Tarjeta recibida en custodia",
+          descripcion:
+            `${detalleTarjeta.bank_name} · **** ${detalleTarjeta.card_last_four} · ` +
+            `Titular: ${detalleTarjeta.cardholder_name}.`,
+          categoria: "tarjeta",
+        });
+      }
+
+      if (detalleTarjeta?.returned_at) {
+        eventos.push({
+          id: `tarjeta-devuelta-${detalleTarjeta.id}`,
+          fecha: detalleTarjeta.returned_at,
+          titulo: "Tarjeta devuelta",
+          descripcion:
+            `${detalleTarjeta.bank_name} · **** ${detalleTarjeta.card_last_four}.`,
+          categoria: "tarjeta",
+        });
+      }
+
+      retirosTarjeta
+        .filter((retiro) => retiro.status !== "cancelled")
+        .forEach((retiro) => {
+          eventos.push({
+            id: `retiro-tarjeta-${retiro.id}`,
+            fecha: retiro.collection_date,
+            titulo: "Retiro realizado con tarjeta",
+            descripcion:
+              `Retirado: ${formatearMonto(Number(retiro.withdrawn_amount))}. ` +
+              `Aplicado al préstamo: ${formatearMonto(Number(retiro.payment_applied))}. ` +
+              `Comisión: ${formatearMonto(Number(retiro.bank_fee))}. ` +
+              `Sobrante: ${formatearMonto(Number(retiro.client_surplus))}.` +
+              (retiro.reference_number
+                ? ` Referencia: ${retiro.reference_number}.`
+                : ""),
+            categoria: "tarjeta",
+            monto: Number(retiro.withdrawn_amount),
+          });
+        });
+
+      cierresTarjeta
+        .filter((cierre) => cierre.status !== "cancelled")
+        .forEach((cierre) => {
+          eventos.push({
+            id: `cierre-tarjeta-${cierre.id}`,
+            fecha: cierre.closed_at,
+            titulo: `Cierre de tarjetas · ${cierre.closure_number}`,
+            descripcion:
+              `Período ${formatearFecha(cierre.period_start)} al ` +
+              `${formatearFecha(cierre.period_end)}.`,
+            categoria: "cierre",
+          });
+        });
+
+      sobrantes
+        .filter((sobrante) => sobrante.status !== "cancelled")
+        .forEach((sobrante) => {
+          eventos.push({
+            id: `sobrante-generado-${sobrante.id}`,
+            fecha: sobrante.created_at,
+            titulo: "Sobrante de tarjeta generado",
+            descripcion:
+              `Monto original: ${formatearMonto(Number(sobrante.original_amount))}. ` +
+              `Entregado: ${formatearMonto(Number(sobrante.delivered_amount))}. ` +
+              `Pendiente: ${formatearMonto(Number(sobrante.pending_amount))}.`,
+            categoria: "sobrante",
+            monto: Number(sobrante.original_amount),
+          });
+
+          if (sobrante.delivered_at) {
+            eventos.push({
+              id: `sobrante-entregado-${sobrante.id}`,
+              fecha: sobrante.delivered_at,
+              titulo: "Sobrante entregado",
+              descripcion:
+                `Entregado: ${formatearMonto(Number(sobrante.delivered_amount))}. ` +
+                `Recibido por: ${sobrante.delivered_to || "No indicado"}.` +
+                (sobrante.delivery_reference
+                  ? ` Referencia: ${sobrante.delivery_reference}.`
+                  : ""),
+              categoria: "sobrante",
+              monto: Number(sobrante.delivered_amount),
+            });
+          }
+        });
+
+      ventasGarantia
+        .filter((venta) => venta.status !== "cancelled")
+        .forEach((venta) => {
+          eventos.push({
+            id: `venta-garantia-${venta.id}`,
+            fecha: venta.sale_date,
+            titulo: `Garantía vendida · ${venta.sale_number}`,
+            descripcion:
+              `Comprador: ${venta.buyer_name}. ` +
+              `Venta bruta: ${formatearMonto(Number(venta.gross_sale_amount))}. ` +
+              `Gastos: ${formatearMonto(Number(venta.total_expenses))}. ` +
+              `Ingreso neto: ${formatearMonto(Number(venta.net_sale_amount))}. ` +
+              `Aplicado al préstamo: ${formatearMonto(Number(venta.amount_applied_to_loan))}. ` +
+              `Remanente: ${formatearMonto(Number(venta.remaining_amount))}.`,
+            categoria: "venta",
+            monto: Number(venta.net_sale_amount),
+          });
+        });
+
+      garantias.forEach((garantia) => {
+        eventos.push({
+          id: `garantia-recibida-${garantia.id}`,
+          fecha: `${garantia.received_date}T12:00:00`,
+          titulo: "Garantía recibida",
+          descripcion:
+            `${obtenerTipoGarantia(garantia.collateral_type)} · ` +
+            `${garantia.description}. Estado: ` +
+            `${obtenerEstadoGarantia(garantia.collateral_status)}.`,
+          categoria: "garantia",
+        });
+
+        if (garantia.released_at) {
+          eventos.push({
+            id: `garantia-liberada-${garantia.id}`,
+            fecha: garantia.released_at,
+            titulo: "Garantía liberada",
+            descripcion: garantia.description,
+            categoria: "garantia",
+          });
+        }
+
+        if (garantia.returned_at) {
+          eventos.push({
+            id: `garantia-devuelta-${garantia.id}`,
+            fecha: garantia.returned_at,
+            titulo: "Garantía devuelta",
+            descripcion: garantia.description,
+            categoria: "garantia",
+          });
+        }
+
+        if (garantia.executed_at) {
+          eventos.push({
+            id: `garantia-ejecutada-${garantia.id}`,
+            fecha: garantia.executed_at,
+            titulo: "Garantía ejecutada",
+            descripcion: garantia.description,
+            categoria: "garantia",
+          });
+        }
+      });
+
+      return eventos.sort(
+        (a, b) =>
+          new Date(b.fecha).getTime() -
+          new Date(a.fecha).getTime(),
+      );
+    },
+    [
+      prestamo,
+      pagos,
+      detalleTarjeta,
+      retirosTarjeta,
+      cierresTarjeta,
+      sobrantes,
+      garantias,
+      ventasGarantia,
+    ],
+  );
+
   if (cargando) {
     return (
       <main className="min-h-screen bg-slate-100 p-8">
@@ -1014,13 +1384,23 @@ export default function PrestamoDetallePage() {
  
         {prestamo.loan_type === "collateral" && (
           <section className="mt-6 rounded-2xl border border-amber-200 bg-amber-50 p-6 shadow">
-            <div>
-              <h2 className="text-xl font-bold text-amber-900">
-                Garantías del préstamo
-              </h2>
-              <p className="mt-1 text-sm text-amber-800">
-                Inventario y estado de los bienes o documentos recibidos.
-              </p>
+            <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+              <div>
+                <h2 className="text-xl font-bold text-amber-900">
+                  Garantías del préstamo
+                </h2>
+                <p className="mt-1 text-sm text-amber-800">
+                  Inventario y estado de los bienes o documentos recibidos.
+                </p>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => router.push("/garantias")}
+                className="rounded-lg border border-amber-300 bg-white px-4 py-2 text-sm font-semibold text-amber-900 hover:bg-amber-100"
+              >
+                Abrir módulo de garantías
+              </button>
             </div>
  
             {garantias.length > 0 ? (
@@ -1043,9 +1423,21 @@ export default function PrestamoDetallePage() {
                         </p>
                       </div>
  
-                      <span className={obtenerClaseEstadoGarantia(garantia.collateral_status)}>
-                        {obtenerEstadoGarantia(garantia.collateral_status)}
-                      </span>
+                      <div className="flex flex-col items-start gap-2 sm:items-end">
+                        <span className={obtenerClaseEstadoGarantia(garantia.collateral_status)}>
+                          {obtenerEstadoGarantia(garantia.collateral_status)}
+                        </span>
+
+                        <button
+                          type="button"
+                          onClick={() =>
+                            router.push("/garantias/" + garantia.id)
+                          }
+                          className="rounded-lg bg-amber-700 px-4 py-2 text-sm font-semibold text-white hover:bg-amber-800"
+                        >
+                          Ver expediente
+                        </button>
+                      </div>
                     </div>
  
                     <div className="mt-5 grid grid-cols-1 gap-x-8 gap-y-3 sm:grid-cols-2">
@@ -1131,8 +1523,18 @@ export default function PrestamoDetallePage() {
               </div>
             ) : (
               <div className="mt-5 rounded-xl border border-red-200 bg-red-50 p-4 text-red-700">
-                Este préstamo está marcado como “Con garantía”, pero no se encontró una garantía
-                relacionada en loan_collaterals.
+                <p>
+                  Este préstamo está marcado como “Con garantía”, pero no se encontró una garantía
+                  relacionada en loan_collaterals.
+                </p>
+
+                <button
+                  type="button"
+                  onClick={() => router.push("/garantias")}
+                  className="mt-4 rounded-lg bg-amber-700 px-4 py-2 text-sm font-semibold text-white hover:bg-amber-800"
+                >
+                  Ir a registrar o revisar garantías
+                </button>
               </div>
             )}
           </section>
@@ -1284,6 +1686,85 @@ export default function PrestamoDetallePage() {
           </p>
         </section>
  
+        <section className="mt-6 rounded-2xl bg-white p-6 shadow">
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+            <div>
+              <h2 className="text-xl font-bold text-blue-900">
+                Expediente del préstamo
+              </h2>
+              <p className="mt-1 text-sm text-gray-600">
+                Línea de tiempo integrada con préstamo, pagos, tarjeta y garantías.
+              </p>
+            </div>
+
+            <span className="inline-flex rounded-full bg-blue-100 px-3 py-1 text-sm font-semibold text-blue-800">
+              {expedientePrestamo.length} evento(s)
+            </span>
+          </div>
+
+          {expedientePrestamo.length === 0 ? (
+            <p className="mt-5 text-gray-500">
+              Todavía no hay eventos registrados.
+            </p>
+          ) : (
+            <div className="mt-6 space-y-0">
+              {expedientePrestamo.map((evento, indice) => (
+                <div
+                  key={evento.id}
+                  className="relative flex gap-4 pb-7"
+                >
+                  {indice < expedientePrestamo.length - 1 && (
+                    <div className="absolute left-[11px] top-7 h-full w-0.5 bg-slate-200" />
+                  )}
+
+                  <div
+                    className={
+                      evento.categoria === "pago"
+                        ? "relative z-10 mt-1 h-6 w-6 shrink-0 rounded-full border-4 border-white bg-green-600 shadow"
+                        : evento.categoria === "garantia"
+                          ? "relative z-10 mt-1 h-6 w-6 shrink-0 rounded-full border-4 border-white bg-amber-600 shadow"
+                          : evento.categoria === "tarjeta"
+                            ? "relative z-10 mt-1 h-6 w-6 shrink-0 rounded-full border-4 border-white bg-purple-600 shadow"
+                            : evento.categoria === "cierre"
+                              ? "relative z-10 mt-1 h-6 w-6 shrink-0 rounded-full border-4 border-white bg-indigo-600 shadow"
+                              : evento.categoria === "sobrante"
+                                ? "relative z-10 mt-1 h-6 w-6 shrink-0 rounded-full border-4 border-white bg-cyan-600 shadow"
+                                : evento.categoria === "venta"
+                                  ? "relative z-10 mt-1 h-6 w-6 shrink-0 rounded-full border-4 border-white bg-red-700 shadow"
+                                  : "relative z-10 mt-1 h-6 w-6 shrink-0 rounded-full border-4 border-white bg-blue-700 shadow"
+                    }
+                  />
+
+                  <div className="min-w-0 flex-1 rounded-xl border border-gray-200 bg-slate-50 p-4">
+                    <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+                      <div>
+                        <p className="font-bold text-gray-900">
+                          {evento.titulo}
+                        </p>
+                        <p className="mt-1 text-sm text-gray-600">
+                          {evento.descripcion}
+                        </p>
+                      </div>
+
+                      <div className="shrink-0 text-left sm:text-right">
+                        <p className="text-sm font-semibold text-blue-900">
+                          {formatearFechaHora(evento.fecha)}
+                        </p>
+
+                        {typeof evento.monto === "number" && (
+                          <p className="mt-1 text-sm font-bold text-green-700">
+                            {formatearMonto(evento.monto)}
+                          </p>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </section>
+
         <section className="mt-6 rounded-2xl bg-white p-6 shadow">
           <h2 className="text-xl font-bold text-blue-900">
             Historial de pagos
@@ -1723,3 +2204,4 @@ function obtenerDiasRestantes(fecha: string | null) {
  
   return `${diferencia} días restantes`;
 }
+

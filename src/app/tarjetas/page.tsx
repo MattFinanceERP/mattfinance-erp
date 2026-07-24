@@ -339,18 +339,15 @@ export default function TarjetasPage() {
       setGuardando(false);
       return;
     }
-
-    const distribucion = calcularDistribucion(aplicado, prestamo);
-
     const resultado = await supabase.rpc(
       "register_card_collection",
       {
         p_card_detail_id: tarjetaSeleccionada.id,
         p_withdrawn_amount: retirado,
         p_payment_applied: aplicado,
-        p_interest_amount: distribucion.interes,
-        p_principal_amount: distribucion.capital,
-        p_late_fee_amount: distribucion.mora,
+        p_interest_amount: 0,
+        p_principal_amount: 0,
+        p_late_fee_amount: 0,
         p_bank_fee: comision,
         p_atm_location: formulario.atm_location.trim() || null,
         p_reference_number:
@@ -767,32 +764,6 @@ function obtenerTotalPendiente(tarjeta: TarjetaPrestamo) {
   );
 }
 
-function calcularDistribucion(
-  monto: number,
-  prestamo: PrestamoTarjeta,
-) {
-  let restante = monto;
-
-  const mora = Math.min(
-    restante,
-    Number(prestamo.late_fee_balance),
-  );
-  restante -= mora;
-
-  const interes = Math.min(
-    restante,
-    Number(prestamo.interest_balance),
-  );
-  restante -= interes;
-
-  const capital = Math.min(
-    restante,
-    Number(prestamo.principal_balance),
-  );
-
-  return { mora, interes, capital };
-}
-
 function calcularSobrante(formulario: FormularioRetiro) {
   const retirado = Number(formulario.withdrawn_amount) || 0;
   const aplicado = Number(formulario.payment_applied) || 0;
@@ -944,3 +915,4 @@ function Campo({
     </div>
   );
 }
+

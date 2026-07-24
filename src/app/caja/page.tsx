@@ -1,6 +1,8 @@
 "use client";
 
 import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
+import { PermissionGuard } from "../components/PermissionGuard";
+import { useAccess } from "../components/AccessProvider";
 import { createClient } from "../lib/supabase";
 
 type Moneda = {
@@ -76,9 +78,20 @@ const formularioInicial: FormularioOperacion = {
 };
 
 export default function CajaPage() {
+  return (
+    <PermissionGuard permission="cash.view">
+      <CajaContent />
+    </PermissionGuard>
+  );
+}
+
+function CajaContent() {
   const supabase = useMemo(function crearSupabase() {
     return createClient();
   }, []);
+
+  const { tienePermiso } = useAccess();
+  const puedeGestionarCaja = tienePermiso("cash.manage");
 
   const [movimientos, setMovimientos] = useState<MovimientoCaja[]>([]);
   const [monedas, setMonedas] = useState<Moneda[]>([]);
@@ -229,6 +242,13 @@ export default function CajaPage() {
   );
 
   function abrirModalOperacion() {
+    if (!puedeGestionarCaja) {
+      setMensajeError(
+        "No tienes permiso para registrar operaciones de caja.",
+      );
+      return;
+    }
+
     const monedaPredeterminada =
       monedasDisponibles.find((moneda) => moneda.code === "DOP") ??
       monedasDisponibles[0];
@@ -625,6 +645,14 @@ export default function CajaPage() {
 
   async function registrarOperacion(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+
+    if (!puedeGestionarCaja) {
+      setMensajeError(
+        "No tienes permiso para registrar operaciones de caja.",
+      );
+      cerrarModalOperacion();
+      return;
+    }
     setMensajeError("");
     setMensajeExito("");
 
@@ -808,14 +836,28 @@ export default function CajaPage() {
             </p>
           </div>
 
-          <button
-            type="button"
-            onClick={abrirModalOperacion}
-            className="rounded-lg bg-blue-700 px-5 py-3 font-semibold text-white shadow hover:bg-blue-800"
-          >
-            + Nueva operación
-          </button>
+          {puedeGestionarCaja ? (
+            <button
+              type="button"
+              onClick={abrirModalOperacion}
+              className="rounded-lg bg-blue-700 px-5 py-3 font-semibold text-white shadow hover:bg-blue-800"
+            >
+              + Nueva operación
+            </button>
+          ) : (
+            <span className="rounded-lg border border-slate-300 bg-white px-4 py-3 text-sm font-semibold text-slate-600">
+              Acceso de consulta
+            </span>
+          )}
         </div>
+
+        {!puedeGestionarCaja && (
+          <div className="mt-6 rounded-lg border border-blue-200 bg-blue-50 p-4 text-sm text-blue-800">
+            Puedes consultar balances y movimientos. Para registrar entradas,
+            salidas, cambios de divisas o cambios de cheques se requiere el
+            permiso cash.manage.
+          </div>
+        )}
 
         {mensajeError !== "" && !modalOperacionAbierto && (
           <div className="mt-6 rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-700">
@@ -1022,7 +1064,7 @@ export default function CajaPage() {
         </section>
       </div>
 
-      {modalOperacionAbierto && (
+      {modalOperacionAbierto && puedeGestionarCaja && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
           <div className="max-h-[95vh] w-full max-w-2xl overflow-y-auto rounded-2xl bg-white p-6 shadow-2xl">
             <div className="flex items-start justify-between gap-4">
@@ -1679,3 +1721,4 @@ export default function CajaPage() {
     </main>
   );
 }
+
